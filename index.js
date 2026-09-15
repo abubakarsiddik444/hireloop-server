@@ -10,7 +10,7 @@ app.use(express.json());
 
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId,  } = require('mongodb');
 
 app.get('/', (req, res) => {
     res.send('Hello World!')
@@ -35,6 +35,14 @@ async function run() {
         const database = client.db("hireloop_db");
         const jobCollection = database.collection("jobs");
         const companyCollection = database.collection("companies");
+        const usersCollection = database.collection("user");
+
+        app.get('/api/users', async (req, res) => {
+
+            const cursor = usersCollection.find().skip(6);
+            const result = await cursor.toArray();
+            res.send(result);
+        })
 
 
         app.get('/api/jobs', async (req, res) => {
@@ -42,10 +50,22 @@ async function run() {
             if (req.query.companyId) {
                 query.companyId = req.query.companyId;
             }
+            if (req.query.status) {
+                query.status = req.query.status;
+            }
             const cursor = jobCollection.find(query);
             const results = await cursor.toArray();
             res.send(results);
 
+        })
+
+        app.get('/api/jobs/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = {
+                _id: new ObjectId(id)
+            }
+            const result = await jobCollection.findOne(query);
+            res.send(result);
         })
 
 
@@ -61,13 +81,22 @@ async function run() {
 
 
         // company related apis
+
+        app.get('/api/companies', async (req, res) => {
+            const cursor = companyCollection.find().skip(8);
+            const result = await cursor.toArray();
+            res.send(result);
+        })
+
+
         app.get('/api/my/companies', async (req, res) => {
             const query = {};
-            if(req.query.recruiterId){
+            if (req.query.recruiterId) {
                 query.recruiterId = req.query.recruiterId;
             }
-            const results = await companyCollection.findOne(query);
-            res.send(results);
+            const result = await companyCollection.findOne(query);
+            console.log('my company', result);
+            res.send(result || {});
         });
 
         app.post("/api/companies", async (req, res) => {
@@ -101,9 +130,10 @@ app.listen(port, () => {
 
 
 
+// here is the company information. created in db. note this information for this conversation. i will detail prompt later.
 
 
-
+// now give me 30 jobs randomly for these companies. and do not provide _id field for the job: and the signature of a job is below:
 
 
 
