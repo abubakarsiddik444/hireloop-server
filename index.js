@@ -37,7 +37,8 @@ async function run() {
         const companyCollection = database.collection("companies");
         const usersCollection = database.collection("user");
         const applicationsCallection = database.collection("applications");
-
+        const planCallection = database.collection('plans');
+        const subscriptionCallection = database.collection('subscriptions')
 
 
         app.get('/api/users', async (req, res) => {
@@ -139,7 +140,44 @@ async function run() {
             res.send(result);
         });
 
+        // Plans
+        app.get('/api/plans', async (req, res) => {
+            const query = {}
+            if (req.query.plan_id) {
+                query.id = req.query.plan_id
+            }
+            const plan = await planCallection.findOne(query);
+            res.send(plan)
+        })
 
+
+        // subscription
+        app.post('/api/subscriptions', async (req, res) => {
+            const data = req.body;
+            const subsInfo = {
+                ...data,
+                createdAt: new Date()
+            }
+
+            const result = await subscriptionCallection.insertOne(subsInfo);
+
+            // update the user plan information
+            const filter = { email: data.email };
+
+            // update the value of the 'quantity' field to 5
+            const updateDocument = {
+                $set: {
+                    plan: data.planId,
+                },
+            };
+
+            const updateResult = await usersCollection.updateOne(filter, updateDocument);
+            res.send(updateResult)
+        })
+
+
+
+        // send a ping to confirm a sessessfull connection
 
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged deployment. You successfully connected to MongoDB!");
