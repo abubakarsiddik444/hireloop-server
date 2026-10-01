@@ -10,11 +10,18 @@ app.use(express.json());
 
 
 
-const { MongoClient, ServerApiVersion, ObjectId,  } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId, } = require('mongodb');
 
 app.get('/', (req, res) => {
     res.send('Hello World!')
 })
+
+const logger = (req, res, next) => {
+    console.log('logger middleware logged', req.params);
+    next();
+}
+
+
 
 
 const uri = process.env.MONGO_DB_URI;
@@ -39,16 +46,83 @@ async function run() {
         const applicationsCallection = database.collection("applications");
         const planCallection = database.collection('plans');
         const subscriptionCallection = database.collection('subscriptions')
+        const sessionCallection = database.collection('session')
 
 
-        app.get('/api/users', async (req, res) => {
+        // verification related apis
+        const verifyToken = async (req, res, next) => {
+            console.log('headers', req.headers);
+            const authHeader = req.headers?.authorization;
+            if (!authHeader) {
+                return res.status(401).send({ message: 'unauthorized access' });
+            }
 
-            const cursor = usersCollection.find();
-            const result = await cursor.toArray();
-            res.send(result);
-        })
+            const token = authHeader.split(' ')[1];
+
+            if (!token) {
+                return res.status(401).send({ message: 'unauthorized access' });
+            }
+
+            const query = { token: token };
+            const session = await sessionCallection.findOne(query);
+
+            if (!session) {
+                return res.status(401).send({ message: 'unauthorized access' });
+            }
 
 
+            const userId = session.userId;
+
+            const userQuery = {
+                _id: userId
+            }
+
+            const user = await usersCollection.findOne(userQuery);
+
+            if (!user) {
+                return res.status(401).send({ message: 'unauthorized access' });
+            }
+
+            // set data in the req object
+            req.user = user;
+
+            next();
+        };
+
+        // must be used after verifyToken middleware
+        const verifySeeker = async (req, res, next) => {
+            if (req.user?.role !== 'seeker') {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        };
+
+        // must be used after verifyToken middleware
+        const verifyRecruiter = async (req, res, next) => {
+            if (req.user?.role !== 'recruiter') {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        };
+
+
+        // must be used after verifyToken middleware
+        const verifyAdmin = async (req, res, next) => {
+            if (req.user.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        }
+
+
+        // app.get('/api/users', async (req, res) => {
+
+        //     const cursor = usersCollection.find();
+        //     const result = await cursor.toArray();
+        //     res.send(result);
+        // })
+
+        // Job related apis
         app.get('/api/jobs', async (req, res) => {
             const query = {};
             if (req.query.companyId) {
@@ -85,10 +159,17 @@ async function run() {
 
 
         // application related apis
-        app.get('/api/applications', async (req, res) => {
+        app.get('/api/applications', verifyToken, verifySeeker, async (req, res) => {
             const query = {};
             if (req.query.applicantId) {
                 query.applicantId = req.query.applicantId;
+
+                //check whether asking user information or someone ele
+                console.log(req.user, req.query.applicantId);
+                if (req.user._id.toString() !== req.query.applicantId) {
+                    return res.status(403).send({ message: 'forbidden access' });
+                }
+
             }
             if (req.query.jobId) {
                 query.jobId = req.query.jobId;
@@ -121,16 +202,16 @@ async function run() {
 
 
         // inefficient way to join/aggregate collection
-        app.get('/api/companies', async (req, res) => {
+        app.get('/api/companies', verifyToken, verifyAdmin, async (req, res) => {
             const cursor = companyCollection.find();
             const companies = await cursor.toArray();
 
-            for(const company of companies){
+            for (const company of companies) {
                 const filter = {
                     companyId: company._id.toString()
                 }
                 const jobCount = await jobCollection.countDocuments(filter)
-                company.jobCount= jobCount
+                company.jobCount = jobCount
 
             }
 
@@ -155,7 +236,7 @@ async function run() {
         })
 
 
-        app.get('/api/stats', async(req, res) => {
+        app.get('/api/stats', async (req, res) => {
             const pipeline = [
                 {
                     $group: {
@@ -204,7 +285,7 @@ async function run() {
         });
 
 
-        app.patch('/api/companies/:id', async (req, res) => {
+        app.patch('/api/companies/:id', logger, verifyToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const updatedCompany = req.body;
             const filter = { _id: new ObjectId(id) }
