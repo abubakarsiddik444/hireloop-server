@@ -124,7 +124,16 @@ async function run() {
 
         // Job related apis
         app.get('/api/jobs', async (req, res) => {
+            console.log('server side query', req.query);
             const query = {};
+            
+            //job filter related query
+            if (req.query.type) {
+                query.type = req.query.type;
+            }
+
+
+            // company related query
             if (req.query.companyId) {
                 query.companyId = req.query.companyId;
             }
@@ -136,6 +145,9 @@ async function run() {
             res.send(results);
 
         })
+
+
+        
 
         app.get('/api/jobs/:id', async (req, res) => {
             const id = req.params.id;
